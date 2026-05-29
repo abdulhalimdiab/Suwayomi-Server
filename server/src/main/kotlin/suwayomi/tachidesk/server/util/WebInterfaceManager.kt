@@ -205,17 +205,169 @@ object WebInterfaceManager {
         val tempWebUIRoot = createServableDirectory()
         val orgIndexHtml = File("$tempWebUIRoot/index.html")
 
-        if (ServerSubpath.isDefined() && orgIndexHtml.exists()) {
+        if (orgIndexHtml.exists()) {
             val originalIndexHtml = orgIndexHtml.readText()
-            val subpathInjectionBaseTag = "<base href=\"${ServerSubpath.asRootPath()}\">"
 
-            val indexHtmlWithSubpathInjection =
-                originalIndexHtml.replace(
-                    "<head>",
-                    "<head>$subpathInjectionBaseTag",
-                )
+            var modifiedIndexHtml = originalIndexHtml
 
-            orgIndexHtml.writeText(indexHtmlWithSubpathInjection)
+            if (ServerSubpath.isDefined()) {
+                val subpathInjectionBaseTag = "<base href=\"${ServerSubpath.asRootPath()}\">"
+                modifiedIndexHtml =
+                    modifiedIndexHtml.replace(
+                        "<head>",
+                        "<head>$subpathInjectionBaseTag",
+                    )
+            }
+
+            val shutdownButtonInjection = """
+<script>
+(function() {
+    console.log('[sm] init');
+    var apiBase = '${ServerSubpath.maybeAddAsPrefix("/api/v1/server")}';
+    if (!apiBase.startsWith('/')) apiBase = '/' + apiBase;
+    var shutdownApi = apiBase + '/shutdown';
+    var restartApi = apiBase + '/restart';
+
+    function addStyle(css) {
+        var s = document.createElement('style');
+        s.textContent = css;
+        document.head.appendChild(s);
+    }
+
+    addStyle('#sm-modal{display:none;position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,0.5);align-items:center;justify-content:center}#sm-modal.show{display:flex}#sm-modal .sm-content{background:#222635;color:#fff;padding:32px;border-radius:12px;max-width:400px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.5);font:400 16px/1.5 Roboto,Helvetica,Arial,sans-serif}#sm-modal .sm-content h3{margin:0 0 12px;font-size:20px}#sm-modal .sm-content p{margin:0 0 24px;color:rgba(255,255,255,0.7);font-size:14px}#sm-modal .sm-actions{display:flex;gap:12px;justify-content:center}#sm-modal .sm-actions button{all:unset;padding:8px 24px;border-radius:4px;cursor:pointer;text-transform:uppercase;letter-spacing:.02857em;font-weight:500;font-size:14px;line-height:1.75}#sm-modal .sm-actions .sm-cancel{background:rgba(255,255,255,0.1);color:#fff}#sm-modal .sm-actions .sm-cancel:hover{background:rgba(255,255,255,0.2)}#sm-modal .sm-actions .sm-confirm-shutdown{background:#c62828;color:#fff}#sm-modal .sm-actions .sm-confirm-shutdown:hover{background:#e53935}#sm-modal .sm-actions .sm-confirm-restart{background:#1e88e5;color:#fff}#sm-modal .sm-actions .sm-confirm-restart:hover{background:#32a0ff}#sm-overlay{display:none;position:fixed;inset:0;z-index:2147483647;background:#0c1021;color:#fff;flex-direction:column;align-items:center;justify-content:center;font:400 16px/1.5 Roboto,Helvetica,Arial,sans-serif;gap:16px;text-align:center;padding:20px}#sm-overlay.show{display:flex}#sm-overlay h2{font-size:24px;margin:0}#sm-overlay p{margin:0;color:rgba(255,255,255,0.7)}');
+
+    var modalHtml = '<div id="sm-modal"><div class="sm-content"><h3 id="sm-title">Confirm</h3><p id="sm-msg">Are you sure?</p><div class="sm-actions"><button class="sm-cancel" id="sm-cancel">Cancel</button><button id="sm-confirm" class="sm-confirm-shutdown">Confirm</button></div></div></div>';
+    var overlayHtml = '<div id="sm-overlay"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg><h2 id="sm-overlay-title">Server Offline</h2><p id="sm-overlay-msg">The server has been shut down.</p></div>';
+
+    function initUI() {
+        if (document.getElementById('sm-modal') || document.getElementById('sm-overlay')) return;
+        var d1 = document.createElement('div'); d1.innerHTML = modalHtml; document.body.appendChild(d1.firstElementChild);
+        var d2 = document.createElement('div'); d2.innerHTML = overlayHtml; document.body.appendChild(d2.firstElementChild);
+    }
+    initUI();
+
+    var modal = document.getElementById('sm-modal');
+    var modalTitle = document.getElementById('sm-title');
+    var modalMsg = document.getElementById('sm-msg');
+    var modalConfirm = document.getElementById('sm-confirm');
+    var overlay = document.getElementById('sm-overlay');
+    var overlayTitle = document.getElementById('sm-overlay-title');
+    var overlayMsg = document.getElementById('sm-overlay-msg');
+
+    var cancelBtn = document.getElementById('sm-cancel');
+    if (cancelBtn) cancelBtn.onclick = function() { modal.classList.remove('show'); };
+
+    function showModal(action, onConfirm) {
+        if (action === 'shutdown') {
+            modalTitle.textContent = 'Shutdown Server';
+            modalMsg.textContent = 'Are you sure you want to shut down the server? All ongoing operations will be stopped.';
+            modalConfirm.textContent = 'Shutdown';
+            modalConfirm.className = 'sm-confirm-shutdown';
+        } else {
+            modalTitle.textContent = 'Restart Server';
+            modalMsg.textContent = 'Are you sure you want to restart the server? It will be unavailable for a short moment.';
+            modalConfirm.textContent = 'Restart';
+            modalConfirm.className = 'sm-confirm-restart';
+        }
+        modalConfirm.onclick = function() {
+            modal.classList.remove('show');
+            onConfirm();
+        };
+        modal.classList.add('show');
+    }
+
+    function showOverlay(action) {
+        if (action === 'shutdown') {
+            overlayTitle.textContent = 'Server Shut Down';
+            overlayMsg.textContent = 'The server has been shut down. You may close this page.';
+        } else {
+            overlayTitle.textContent = 'Server Restarting';
+            overlayMsg.textContent = 'The server is restarting. Please wait a moment then reload.';
+        }
+        overlay.classList.add('show');
+    }
+
+    function runAction(action) {
+        var api = action === 'shutdown' ? shutdownApi : restartApi;
+        showModal(action, function() {
+            fetch(api, {method:'POST'}).then(function() { showOverlay(action); }).catch(function() { showOverlay(action); });
+        });
+    }
+
+    var navIcons = {
+        shutdown: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>',
+        restart: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>'
+    };
+
+    var injected = false;
+
+    function findItem(text) {
+        var all = document.querySelectorAll('a, span, [class*="MuiListItemButton"]');
+        var lower = text.toLowerCase();
+        for (var i = 0; i < all.length; i++) {
+            if (all[i].textContent.trim().toLowerCase() === lower) {
+                console.log('[sm] found', text, ':', all[i]);
+                return all[i];
+            }
+        }
+        console.log('[sm] NOT found:', text);
+        return null;
+    }
+
+    function injectSidebar() {
+        if (injected) return true;
+        var about = findItem('About');
+        if (!about) { console.log('[sm] About not found'); return false; }
+        var list = about.parentElement;
+        if (!list) { console.log('[sm] About has no parent'); return false; }
+        var ref = about.nextElementSibling;
+
+        var sep = document.createElement('a');
+        sep.style.cssText = 'display:block;height:1px;margin:8px 16px;border-top:1px solid rgba(255,255,255,0.12);pointer-events:none;cursor:default';
+        list.insertBefore(sep, ref);
+
+        ['Shutdown', 'Restart'].forEach(function(label) {
+            var clone = about.cloneNode(true);
+            clone.removeAttribute('href');
+            clone.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); runAction(label.toLowerCase()); });
+            var icon = clone.querySelector('[class*="MuiListItemIcon"]');
+            if (icon) icon.innerHTML = navIcons[label.toLowerCase()];
+            var text = clone.querySelector('[class*="MuiListItemText"]');
+            if (text) (text.querySelector('[class*="primary"]') || text).textContent = label;
+            list.insertBefore(clone, ref);
+        });
+
+        injected = true;
+        console.log('[sm] sidebar injection success');
+        return true;
+    }
+
+    function tryInject() {
+        if (injectSidebar()) return;
+        var obs = new MutationObserver(function() {
+            if (injectSidebar()) obs.disconnect();
+        });
+        obs.observe(document.body, {childList:true, subtree:true});
+        setTimeout(function() {
+            obs.disconnect();
+            if (!injected) {
+                console.log('[sm] sidebar failed, showing floating buttons');
+                addStyle('#sm-fb-wrap{position:fixed;bottom:24px;left:24px;z-index:9999;display:flex;flex-direction:column;gap:12px}#sm-fb-wrap button{width:56px;height:56px;border:none;border-radius:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px -1px rgba(0,0,0,0.2),0 6px 10px 0 rgba(0,0,0,0.14),0 1px 18px 0 rgba(0,0,0,0.12)}#sm-fb-wrap button svg{width:24px;height:24px}#sm-fb-wrap .sm-fb-restart{background:#1565c0;color:#fff}#sm-fb-wrap .sm-fb-shutdown{background:#c62828;color:#fff}');
+                var w = document.createElement('div'); w.id = 'sm-fb-wrap';
+                var r = document.createElement('button'); r.className = 'sm-fb-restart'; r.innerHTML = navIcons.restart; r.title = 'Restart'; r.onclick = function() { runAction('restart'); };
+                var s = document.createElement('button'); s.className = 'sm-fb-shutdown'; s.innerHTML = navIcons.shutdown; s.title = 'Shutdown'; s.onclick = function() { runAction('shutdown'); };
+                w.appendChild(r); w.appendChild(s); document.body.appendChild(w);
+            }
+        }, 8000);
+    }
+
+    if (document.body) tryInject();
+    else document.addEventListener('DOMContentLoaded', tryInject);
+})();
+</script>"""
+            modifiedIndexHtml = modifiedIndexHtml.replace("</body>", "$shutdownButtonInjection</body>")
+
+            orgIndexHtml.writeText(modifiedIndexHtml)
         }
 
         return tempWebUIRoot

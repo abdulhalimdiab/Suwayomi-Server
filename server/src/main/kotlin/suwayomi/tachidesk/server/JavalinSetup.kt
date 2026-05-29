@@ -156,6 +156,8 @@ object JavalinSetup {
     fun RoutesConfig.defineCore() {
         val loginPath = ServerSubpath.maybeAddAsPrefix("/login.html")
 
+        val shutdownPath = ServerSubpath.maybeAddAsPrefix("/shutdown.html")
+
         get(loginPath) { ctx ->
             val locale: Locale = LocalizationHelper.ctxToLocale(ctx)
             ctx.header("content-type", "text/html")
@@ -168,6 +170,11 @@ object JavalinSetup {
                     "error" to "",
                 ),
             )
+        }
+
+        get(shutdownPath) { ctx ->
+            ctx.header("content-type", "text/html")
+            ctx.render("Shutdown.jte")
         }
 
         post(loginPath) { ctx ->
@@ -205,7 +212,7 @@ object JavalinSetup {
 
         beforeMatched { ctx ->
             val isWebManifest =
-                listOf("site.webmanifest", "manifest.json", "login.html").any { ctx.path().endsWith(it) }
+                listOf("site.webmanifest", "manifest.json", "login.html", "shutdown.html").any { ctx.path().endsWith(it) }
             val isPageIcon =
                 ctx.path().startsWith('/') &&
                     !ctx.path().substring(1).contains('/') &&

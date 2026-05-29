@@ -30,5 +30,8 @@ enum class ExitCode(
 fun shutdownApp(exitCode: ExitCode) {
     logger.info { "Shutting Down Suwayomi-Server. Goodbye! (reason= ${exitCode.code} (${exitCode.name}))" }
 
+    // small delay to allow HTTP response to be flushed to the client
+    Thread.sleep(1000)
+
     exitProcess(exitCode.code)
 }

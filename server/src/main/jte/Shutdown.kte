@@ -1,0 +1,182 @@
+@import suwayomi.tachidesk.server.generated.BuildConfig
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Suwayomi - Server Control</title>
+    <style>
+        * { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; height: 100%; }
+        body {
+            display: flex;
+            flex-direction: column;
+            background-color: rgb(12, 16, 33);
+            font-family: "Roboto","Helvetica","Arial",sans-serif;
+            font-weight: 400;
+            letter-spacing: 0em;
+        }
+        header {
+            background-color: rgb(34, 38, 53);
+            box-shadow: rgba(0, 0, 0, 0.2) 0px 2px 4px -1px, rgba(0, 0, 0, 0.14) 0px 4px 5px 0px, rgba(0, 0, 0, 0.12) 0px 1px 10px 0px;
+            color: #fff;
+            padding: 8px 32px;
+        }
+        header h1, header p { margin: 0; }
+        footer {
+            color: #fff;
+            padding: 8px;
+        }
+        footer p { margin: 0; font-size: 0.7rem; }
+        main { height: 100%; position: relative; padding-top: 24px; }
+
+        .card {
+            margin: 8px;
+            padding: 24px;
+            border-radius: 8px;
+            border: 1px solid rgb(12, 16, 33);
+            background-color: rgb(6, 8, 16);
+            color: white;
+            text-align: center;
+        }
+        .card h2 { margin-top: 0; }
+        .card p { margin-bottom: 24px; }
+        .buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+        .btn {
+            all: unset;
+            padding: 12px 24px;
+            line-height: 1.75;
+            text-align: center;
+            min-width: 120px;
+            border-radius: 4px;
+            color: rgb(255, 255, 255);
+            text-transform: uppercase;
+            letter-spacing: 0.02857em;
+            cursor: pointer;
+        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-shutdown { background-color: rgb(198, 40, 40); }
+        .btn-shutdown:hover:not(:disabled) { background-color: rgb(230, 60, 60); }
+        .btn-restart { background-color: rgb(30, 136, 229); }
+        .btn-restart:hover:not(:disabled) { background-color: rgb(50, 160, 255); }
+        #status { margin-top: 16px; font-style: italic; }
+
+        @media (min-width: 500px) {
+            .card { width: 100%; max-width: 450px; margin: 8px auto; }
+        }
+
+        .modal {
+            display: none;
+            position: fixed; inset: 0; z-index: 10000;
+            background: rgba(0,0,0,0.5);
+            align-items: center; justify-content: center;
+        }
+        .modal.show { display: flex; }
+        .modal-content {
+            background: rgb(34, 38, 53);
+            color: white;
+            padding: 32px;
+            border-radius: 12px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        .modal-content h3 { margin: 0 0 12px; }
+        .modal-content p { margin: 0 0 24px; color: rgba(255,255,255,0.7); }
+        .modal-actions { display: flex; gap: 12px; justify-content: center; }
+        .modal-actions button {
+            all: unset;
+            padding: 8px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.02857em;
+            font-weight: 500;
+        }
+        .modal-actions .cancel {
+            background: rgba(255,255,255,0.1);
+            color: white;
+        }
+        .modal-actions .cancel:hover { background: rgba(255,255,255,0.2); }
+        .modal-actions .confirm-shutdown { background: rgb(198, 40, 40); color: white; }
+        .modal-actions .confirm-shutdown:hover { background: rgb(230, 60, 60); }
+        .modal-actions .confirm-restart { background: rgb(30, 136, 229); color: white; }
+        .modal-actions .confirm-restart:hover { background: rgb(50, 160, 255); }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Suwayomi</h1>
+    </header>
+    <main>
+        <div class="card">
+            <h2>Server Control</h2>
+            <p>Choose an action for the Suwayomi-Server.</p>
+            <div class="buttons">
+                <button class="btn btn-restart" onclick="showModal('restart')">Restart</button>
+                <button class="btn btn-shutdown" onclick="showModal('shutdown')">Shutdown</button>
+            </div>
+            <div id="status"></div>
+        </div>
+    </main>
+    <footer>
+        <p>Suwayomi: ${BuildConfig.VERSION}</p>
+    </footer>
+
+    <div class="modal" id="confirmModal">
+        <div class="modal-content">
+            <h3 id="modalTitle">Confirm</h3>
+            <p id="modalMessage">Are you sure?</p>
+            <div class="modal-actions">
+                <button class="cancel" onclick="hideModal()">Cancel</button>
+                <button class="confirm-shutdown" id="confirmBtn" onclick="executeAction()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let pendingAction = null;
+
+        function showModal(action) {
+            pendingAction = action;
+            document.getElementById('modalTitle').textContent = action === 'shutdown' ? 'Shutdown Server' : 'Restart Server';
+            document.getElementById('modalMessage').textContent = action === 'shutdown'
+                ? 'Are you sure you want to shut down the server? All ongoing operations will be stopped.'
+                : 'Are you sure you want to restart the server? It will be unavailable for a short moment.';
+            const confirmBtn = document.getElementById('confirmBtn');
+            confirmBtn.textContent = action === 'shutdown' ? 'Shutdown' : 'Restart';
+            confirmBtn.className = action === 'shutdown' ? 'confirm-shutdown' : 'confirm-restart';
+            document.getElementById('confirmModal').classList.add('show');
+        }
+
+        function hideModal() {
+            document.getElementById('confirmModal').classList.remove('show');
+            pendingAction = null;
+        }
+
+        async function executeAction() {
+            const action = pendingAction;
+            hideModal();
+            const status = document.getElementById('status');
+            const btns = document.querySelectorAll('.btn');
+            btns.forEach(b => b.disabled = true);
+
+            const endpoint = action === 'shutdown' ? '/api/v1/server/shutdown' : '/api/v1/server/restart';
+            status.textContent = action === 'shutdown' ? 'Shutting down...' : 'Restarting...';
+
+            try {
+                const resp = await fetch(endpoint, { method: 'POST' });
+                if (resp.ok) {
+                    status.textContent = action === 'shutdown' ? 'Server is shutting down. Goodbye!' : 'Server is restarting...';
+                } else {
+                    status.textContent = 'Failed: ' + (await resp.text());
+                    btns.forEach(b => b.disabled = false);
+                }
+            } catch (e) {
+                status.textContent = 'Server ' + (action === 'shutdown' ? 'stopped' : 'restarted') + '. You can close this page.';
+            }
+        }
+    </script>
+</body>
+</html>
