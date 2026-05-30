@@ -315,9 +315,9 @@ object WebInterfaceManager {
     }
 
     function injectSidebar() {
-        if (injected) return true;
         var about = findItem('About');
-        if (!about) { console.log('[sm] About not found'); return false; }
+        if (!about) { injected = false; console.log('[sm] About not found'); return false; }
+        if (injected) return true;
         var list = about.parentElement;
         if (!list) { console.log('[sm] About has no parent'); return false; }
         var ref = about.nextElementSibling;
@@ -343,13 +343,12 @@ object WebInterfaceManager {
     }
 
     function tryInject() {
-        if (injectSidebar()) return;
+        injectSidebar();
         var obs = new MutationObserver(function() {
-            if (injectSidebar()) obs.disconnect();
+            injectSidebar();
         });
         obs.observe(document.body, {childList:true, subtree:true});
         setTimeout(function() {
-            obs.disconnect();
             if (!injected) {
                 console.log('[sm] sidebar failed, showing floating buttons');
                 addStyle('#sm-fb-wrap{position:fixed;bottom:24px;left:24px;z-index:9999;display:flex;flex-direction:column;gap:12px}#sm-fb-wrap button{width:56px;height:56px;border:none;border-radius:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px -1px rgba(0,0,0,0.2),0 6px 10px 0 rgba(0,0,0,0.14),0 1px 18px 0 rgba(0,0,0,0.12)}#sm-fb-wrap button svg{width:24px;height:24px}#sm-fb-wrap .sm-fb-restart{background:#1565c0;color:#fff}#sm-fb-wrap .sm-fb-shutdown{background:#c62828;color:#fff}');
