@@ -18,6 +18,8 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.inSubQuery
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.like
+import org.jetbrains.exposed.v1.core.lowerCase
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -108,6 +110,7 @@ class MangaQuery {
         val initialized: Boolean? = null,
         val artist: String? = null,
         val author: String? = null,
+        val search: String? = null,
         val description: String? = null,
         val genre: List<String>? = null,
         val status: MangaStatus? = null,
@@ -129,6 +132,13 @@ class MangaQuery {
             opAnd.eq(artist, MangaTable.artist)
             opAnd.eq(author, MangaTable.author)
             opAnd.eq(description, MangaTable.description)
+            opAnd.andWhere(search) { s ->
+                val lower = s.lowercase()
+                (MangaTable.title.lowerCase() like "%$lower%") or
+                    (MangaTable.author.lowerCase() like "%$lower%") or
+                    (MangaTable.artist.lowerCase() like "%$lower%") or
+                    (MangaTable.description.lowerCase() like "%$lower%")
+            }
             opAnd.andWhereAll(genre) { MangaTable.genre like "%$it%" }
             opAnd.eq(status?.value, MangaTable.status)
             opAnd.eq(inLibrary, MangaTable.inLibrary)

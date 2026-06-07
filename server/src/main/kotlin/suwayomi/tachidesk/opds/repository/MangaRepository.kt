@@ -210,11 +210,15 @@ object MangaRepository {
                 conditions += (
                     (MangaTable.title.lowerCase() like "%$lowerQ%") or
                         (MangaTable.author.lowerCase() like "%$lowerQ%") or
+                        (MangaTable.artist.lowerCase() like "%$lowerQ%") or
                         (MangaTable.genre.lowerCase() like "%$lowerQ%")
                 )
             }
             criteria.author?.takeIf { it.isNotBlank() }?.let { author ->
                 conditions += (MangaTable.author.lowerCase() like "%${author.lowercase()}%")
+            }
+            criteria.artist?.takeIf { it.isNotBlank() }?.let { artist ->
+                conditions += (MangaTable.artist.lowerCase() like "%${artist.lowercase()}%")
             }
             criteria.title?.takeIf { it.isNotBlank() }?.let { title ->
                 conditions += (MangaTable.title.lowerCase() like "%${title.lowercase()}%")
